@@ -122,10 +122,42 @@ $ ./scripts/check-env.sh
 - `mill emulator[...TestHarness,...TinyConfig].mfccompiler.compile` — firtool
   1.62.1(Rosetta) 패치 후 성공, `.sv` 216개 생성됨.
 
-## 8. 아직 안 해본 것 (round 2로 미룸)
+## 8. Round 2: TLXbarUnitTestConfig verilate
 
-- `TLXbarUnitTestConfig`를 `build.sc`의 `emulator` cross-list에 추가하는 패치
-  (아직 안 적용 — Verilog 생성은 `TinyConfig`로만 확인했고 xbar 유닛테스트 config는
-  round 2에서 진행)
-- Verilator로 실제 바이너리까지 빌드 (`libfesvr` 링크 이슈 예상 — `riscv-isa-sim`은
-  이미 설치되어 있으므로 `SPIKE_ROOT`/`VERILATOR_ROOT` 환경변수만 맞추면 될 가능성 높음)
+`build.sc`의 `emulator` cross-list에 `TLXbarUnitTestConfig` 추가
+(`patches/0002-add-tlxbar-unittest-config.patch`). 그 후 겪은 문제들:
+
+1. **`SPIKE_ROOT`가 잡혔는데도 "NoSuchElementException: RISCV" 에러 반복.**
+   원인: mill은 기본적으로 **백그라운드 서버(데몬)**로 동작해서, 같은 디렉터리에서
+   처음 실행했을 때의 환경변수를 계속 캐싱한다. 이후 셸에서 `export SPIKE_ROOT=...`를
+   새로 해도 데몬은 그걸 못 본다.
+   ```bash
+   ps aux | grep MillServerMain   # 살아있는 데몬 PID 확인
+   kill -9 <pid1> <pid2>          # 데몬 전부 종료
+   mill --no-server '...'         # 데몬 없이(또는 새 데몬으로) 재실행
+   ```
+2. **`CMake Error: ... unable to find ... "Ninja"`.** rocket-chip의 Verilator
+   CMake 플로우가 Ninja generator를 쓴다. `brew install ninja`로 해결.
+
+```bash
+export JAVA_HOME="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+export PATH="$HOME/bin:$JAVA_HOME/bin:$PATH"
+export VERILATOR_ROOT="$(brew --prefix verilator)/share/verilator"
+export SPIKE_ROOT="/opt/homebrew/opt/riscv-isa-sim"
+mill --no-server 'emulator[freechips.rocketchip.unittest.TestHarness,freechips.rocketchip.unittest.TLXbarUnitTestConfig].elf'
+```
+
+verilate 성공 결과:
+```
+[30/32] Linking CXX executable emulator
+```
+바이너리: `out/emulator/freechips.rocketchip.unittest.TestHarness/freechips.rocketchip.unittest.TLXbarUnitTestConfig/verilator/elf.dest/emulator`
+(Mach-O 64-bit arm64 네이티브 실행파일 — Verilator 자체가 생성하는 C++는 네이티브
+arm64로 컴파일되므로 firtool과 달리 Rosetta 불필요).
+
+## 9. 아직 안 해본 것 (round 3로 미룸)
+
+- 생성된 `emulator` 바이너리를 실제로 실행해서 `TLRAMXbarTest`/`TLMulticlientXbarTest`
+  등이 끝까지 통과하는지 확인
+- `src/main/scala/xbarstudy/`에 직접 sparse-visibility 하네스 구현 (체크리스트
+  Section H에서 설계한 대로 `visibility`를 좁힌 variant)

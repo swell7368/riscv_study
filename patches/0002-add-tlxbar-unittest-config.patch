@@ -1,0 +1,12 @@
+diff --git a/build.sc b/build.sc
+index d67c7a8e7..1a2b3c4d5 100644
+--- a/build.sc
++++ b/build.sc
+@@ -348,6 +348,7 @@ object emulator extends Cross[Emulator](
+   ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.AMBAUnitTestConfig"),
+   ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.TLSimpleUnitTestConfig"),
+   ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.TLWidthUnitTestConfig"),
++  ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.TLXbarUnitTestConfig"),
+   // DTM
+   ("freechips.rocketchip.system.TestHarness", "freechips.rocketchip.system.WithJtagDTMSystem_freechips.rocketchip.system.WithDebugSBASystem_freechips.rocketchip.system.DefaultConfig"),
+   ("freechips.rocketchip.system.TestHarness", "freechips.rocketchip.system.WithJtagDTMSystem_freechips.rocketchip.system.WithDebugSBASystem_freechips.rocketchip.system.DefaultRV32Config"),

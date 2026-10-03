@@ -8,7 +8,10 @@ RocketChip의 TileLink crossbar(`TLXbar`)가 만들어내는 **sparse connectivi
 - [x] 로컬 환경 구축 (JDK, mill, Verilator, RISC-V 툴체인)
 - [x] `docs/01-xbar-sparsity-checklist.md` 작성
 - [x] rocket-chip을 서브모듈로 연결하고 Verilog 생성까지 "빌드됨" 확인
-- [ ] (다음 라운드) 실제 Verilator 시뮬레이션을 끝까지 실행, 파형 확인
+- [x] `TLXbarUnitTestConfig`를 `emulator` cross-list에 패치로 추가하고 verilate까지
+      완료 (네이티브 arm64 `emulator` 바이너리 빌드됨, 아직 실행은 안 함)
+- [ ] (다음 라운드) 빌드된 바이너리를 실제로 실행해 `TLRAMXbarTest` 등이 끝까지
+      통과하는지 확인, 파형 확인
 - [ ] (다음 라운드) `src/main/scala/xbarstudy/`에 직접 sparse-visibility 하네스 구현
 
 ## 호스트 가정
