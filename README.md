@@ -10,9 +10,13 @@ RocketChip의 TileLink crossbar(`TLXbar`)가 만들어내는 **sparse connectivi
 - [x] rocket-chip을 서브모듈로 연결하고 Verilog 생성까지 "빌드됨" 확인
 - [x] `TLXbarUnitTestConfig`를 `emulator` cross-list에 패치로 추가하고 verilate까지
       완료 (네이티브 arm64 `emulator` 바이너리 빌드됨, 아직 실행은 안 함)
-- [ ] (다음 라운드) 빌드된 바이너리를 실제로 실행해 `TLRAMXbarTest` 등이 끝까지
-      통과하는지 확인, 파형 확인
-- [ ] (다음 라운드) `src/main/scala/xbarstudy/`에 직접 sparse-visibility 하네스 구현
+- [x] 빌드된 바이너리를 실행해 6개 테스트(`TLJbarTest`, `TLRAMXbarTest`×3,
+      `TLMulticlientXbarTest`, `TLMasterMuxTest`) 전부 통과 확인 (201782 cycles,
+      결과: [`docs/05-round3-first-run-results.md`](docs/05-round3-first-run-results.md))
+      — 단, 전부 **dense** 베이스라인. sparse variant는 아직.
+- [ ] (다음 라운드) `src/main/scala/xbarstudy/`에 `visibility`를 좁힌
+      sparse-visibility 하네스 구현, dense 결과와 비교
+- [ ] (다음 라운드) 파형(VCD) 확인 필요시 `make debug`로 디버그 빌드 재생성
 
 ## 호스트 가정
 
