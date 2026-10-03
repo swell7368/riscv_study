@@ -14,8 +14,12 @@ RocketChip의 TileLink crossbar(`TLXbar`)가 만들어내는 **sparse connectivi
       `TLMulticlientXbarTest`, `TLMasterMuxTest`) 전부 통과 확인 (201782 cycles,
       결과: [`docs/05-round3-first-run-results.md`](docs/05-round3-first-run-results.md))
       — 단, 전부 **dense** 베이스라인. sparse variant는 아직.
-- [ ] (다음 라운드) `src/main/scala/xbarstudy/`에 `visibility`를 좁힌
-      sparse-visibility 하네스 구현, dense 결과와 비교
+- [x] `TLFilter`로 `visibility`를 진짜로 좁힌 sparse-visibility 하네스
+      (`TLSparseXbarTest`) 구현, 비대칭 sparse 패턴(client0: 단일 reachable manager
+      포함)으로 67530 cycles에서 통과 확인 — 상세:
+      [`docs/06-sparse-harness-design.md`](docs/06-sparse-harness-design.md)
+- [ ] (다음 라운드) 의도적 negative test — overrideAddress를 visibility보다 넓게
+      줘서 don't-care alias(단일 reachable manager로 조용히 라우팅되는 현상) 실증
 - [ ] (다음 라운드) 파형(VCD) 확인 필요시 `make debug`로 디버그 빌드 재생성
 
 ## 호스트 가정

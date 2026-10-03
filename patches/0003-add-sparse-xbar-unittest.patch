@@ -1,0 +1,133 @@
+diff --git a/build.sc b/build.sc
+index 1f5142996..5de05feca 100644
+--- a/build.sc
++++ b/build.sc
+@@ -191,7 +191,6 @@ trait Emulator extends Cross.Module2[String, String] {
+         generator.chirrtl().path,
+         s"--annotation-file=${generator.chiselAnno().path}",
+         "--disable-annotation-unknown",
+-        "-dedup",
+         "-O=debug",
+         "--split-verilog",
+         "--preserve-values=named",
+@@ -220,7 +219,6 @@ trait Emulator extends Cross.Module2[String, String] {
+         generator.chirrtl().path,
+         s"--annotation-file=${generator.chiselAnno().path}",
+         "--disable-annotation-unknown",
+-        "-dedup",
+         "-O=debug",
+         "--split-verilog",
+         "--preserve-values=named",
+@@ -350,6 +348,8 @@ object emulator extends Cross[Emulator](
+   ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.AMBAUnitTestConfig"),
+   ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.TLSimpleUnitTestConfig"),
+   ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.TLWidthUnitTestConfig"),
++  ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.TLXbarUnitTestConfig"),
++  ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.TLSparseXbarUnitTestConfig"),
+   // DTM
+   ("freechips.rocketchip.system.TestHarness", "freechips.rocketchip.system.WithJtagDTMSystem_freechips.rocketchip.system.WithDebugSBASystem_freechips.rocketchip.system.DefaultConfig"),
+   ("freechips.rocketchip.system.TestHarness", "freechips.rocketchip.system.WithJtagDTMSystem_freechips.rocketchip.system.WithDebugSBASystem_freechips.rocketchip.system.DefaultRV32Config"),
+diff --git a/src/main/scala/unittest/Configs.scala b/src/main/scala/unittest/Configs.scala
+index 655811576..d7647d9ea 100644
+--- a/src/main/scala/unittest/Configs.scala
++++ b/src/main/scala/unittest/Configs.scala
+@@ -95,6 +95,29 @@ class WithTLXbarUnitTests extends Config((site, here, up) => {
+       Module(new TLMasterMuxTest(           txns=5*txns, timeout=timeout)) ) }
+ })
+ 
++// riscv_study: genuinely sparse-visibility variant of WithTLXbarUnitTests.
++// 4 managers at AddressSet(0x400*n, 0x3ff); client visibility pattern:
++//   client0 -> manager0 only            (single-reachable-slave case)
++//   client1 -> managers {0,1}
++//   client2 -> managers {2,3}
++//   client3 -> all 4 managers           (dense reference, for contrast)
++// See docs/01-xbar-sparsity-checklist.md Section H and
++// docs/06-sparse-harness-design.md for the rationale.
++class WithTLSparseXbarUnitTests extends Config((site, here, up) => {
++  case UnitTests => (q: Parameters) => {
++    implicit val p = q
++    val txns = 100 * site(TestDurationMultiplier)
++    val timeout = 50000 * site(TestDurationMultiplier)
++    val visibilities = Seq(
++      freechips.rocketchip.diplomacy.AddressSet(0x0,   0x3ff), // client0: manager0 only
++      freechips.rocketchip.diplomacy.AddressSet(0x0,   0x7ff), // client1: managers 0,1
++      freechips.rocketchip.diplomacy.AddressSet(0x800, 0x7ff), // client2: managers 2,3
++      freechips.rocketchip.diplomacy.AddressSet(0x0,   0xfff)  // client3: all managers
++    )
++    Seq(Module(new TLSparseXbarTest(visibilities, nManagers=4, txns=2*txns, timeout=timeout)))
++  }
++})
++
+ class WithECCTests extends Config((site, here, up) => {
+   case UnitTests => (q: Parameters) => {
+     Seq(
+@@ -173,6 +196,7 @@ class AMBAUnitTestConfig extends Config(new WithAMBAUnitTests ++ new WithTestDur
+ class TLSimpleUnitTestConfig extends Config(new WithTLSimpleUnitTests ++ new WithTestDuration(10) ++ new BaseSubsystemConfig)
+ class TLWidthUnitTestConfig extends Config(new WithTLWidthUnitTests ++ new WithTestDuration(10) ++ new BaseSubsystemConfig)
+ class TLXbarUnitTestConfig extends Config(new WithTLXbarUnitTests ++ new WithTestDuration(10) ++ new BaseSubsystemConfig)
++class TLSparseXbarUnitTestConfig extends Config(new WithTLSparseXbarUnitTests ++ new WithTestDuration(10) ++ new BaseSubsystemConfig)
+ class ECCUnitTestConfig extends Config(new WithECCTests)
+ class ScatterGatherTestConfig extends Config(new WithScatterGatherTests)
+ class PLRUUnitTestConfig extends Config(new WithPLRUTests)
+diff --git a/src/main/scala/unittest/SparseXbarTest.scala b/src/main/scala/unittest/SparseXbarTest.scala
+new file mode 100644
+index 000000000..7301f8c97
+--- /dev/null
++++ b/src/main/scala/unittest/SparseXbarTest.scala
+@@ -0,0 +1,56 @@
++// riscv_study: sparse-visibility TLXbar study harness.
++// Not upstream rocket-chip code -- tracked locally as patches/0003-add-sparse-xbar-unittest.patch
++// (see docs/01-xbar-sparsity-checklist.md Section H and docs/06-sparse-harness-design.md).
++package freechips.rocketchip.unittest
++
++import chisel3._
++import org.chipsalliance.cde.config.Parameters
++import org.chipsalliance.diplomacy.lazymodule._
++import freechips.rocketchip.diplomacy.AddressSet
++import freechips.rocketchip.tilelink._
++
++/** A TLXbar whose masters have genuinely narrowed diplomacy `visibility`
++  * (not just constrained stimulus), unlike `TLMulticlientXbar` where every
++  * fuzzer keeps the default dense (0, ~0) visibility.
++  *
++  * Each entry in `visibilities` becomes one client, filtered down to that
++  * exact AddressSet via `TLFilter`'s client-side filter (the same mechanism
++  * `TLFilter.cSelectVisibility` style narrowing described in the checklist).
++  * `TLFuzzer.overrideAddress` is set to the same AddressSet so the generated
++  * stimulus never strays outside what the client declared visible --
++  * otherwise `TLMonitor` would (correctly) fire on out-of-visibility
++  * requests and we'd be debugging the testbench, not the DUT.
++  *
++  * 4 fixed managers at AddressSet(0x400*n, 0x3ff), n = 0..3, mirroring the
++  * address layout `TLMulticlientXbar` already uses in this file.
++  */
++class TLSparseXbar(visibilities: Seq[AddressSet], nManagers: Int = 4, txns: Int = 5000)(implicit p: Parameters) extends LazyModule {
++  require(visibilities.nonEmpty)
++
++  val xbar = LazyModule(new TLXbar)
++
++  val fuzzers = visibilities.zipWithIndex.map { case (vis, n) =>
++    val fuzz = LazyModule(new TLFuzzer(txns, overrideAddress = Some(vis)))
++    val filter = LazyModule(new TLFilter(cfilter = { c => Some(c.v1copy(visibility = Seq(vis))) }))
++    xbar.node := TLDelayer(0.1) := filter.node := fuzz.node
++    fuzz
++  }
++
++  (0 until nManagers) foreach { n =>
++    val ram = LazyModule(new TLRAM(AddressSet(0x0 + 0x400 * n, 0x3ff)))
++    ram.node := TLFragmenter(4, 256) := TLDelayer(0.1) := xbar.node
++  }
++
++  lazy val module = new Impl
++  class Impl extends LazyModuleImp(this) with UnitTestModule {
++    // Unlike TLMulticlientXbar (which only waits on fuzzers.last), require
++    // every client to finish -- a stuck/starved client should fail the test.
++    io.finished := fuzzers.map(_.module.io.finished).reduce(_ && _)
++  }
++}
++
++class TLSparseXbarTest(visibilities: Seq[AddressSet], nManagers: Int = 4, txns: Int = 5000, timeout: Int = 500000)(implicit p: Parameters) extends UnitTest(timeout) {
++  val dut = Module(LazyModule(new TLSparseXbar(visibilities, nManagers, txns)).module)
++  dut.io.start := io.start
++  io.finished := dut.io.finished
++}
