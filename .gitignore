@@ -1,0 +1,11 @@
+out/
+obj_dir/
+*.vcd
+*.fst
+*.fsdb
+.bsp/
+.idea/
+.metals/
+.bloop/
+*.class
+.DS_Store
