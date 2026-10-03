@@ -1,0 +1,95 @@
+# Incremental changes on top of patches/0003-add-sparse-xbar-unittest.patch.
+# (Reference/documentation patch, like 0001-0003 -- records intent, not
+# guaranteed to `git apply` cleanly in isolation; see docs/07-negative-test-results.md
+# for the rationale and docs/06-sparse-harness-design.md for what 0003 built.)
+
+--- a/src/main/scala/unittest/SparseXbarTest.scala
++++ b/src/main/scala/unittest/SparseXbarTest.scala
+@@ package freechips.rocketchip.unittest
++object TLSparseXbar {
++  /** One client's diplomacy visibility (what connectivity gets computed from)
++    * and its stimulus range (what TLFuzzer actually generates). Normally
++    * these are identical. Making them differ is exactly how you build the
++    * checklist's "deliberate negative test": a client whose declared
++    * visibility is narrower than the addresses it actually drives.
++    */
++  case class ClientSpec(visibility: AddressSet, stimulus: AddressSet)
++  object ClientSpec {
++    def apply(both: AddressSet): ClientSpec = ClientSpec(both, both)
++  }
++}
++
+-class TLSparseXbar(visibilities: Seq[AddressSet], nManagers: Int = 4, txns: Int = 5000)(implicit p: Parameters) extends LazyModule {
+-  require(visibilities.nonEmpty)
++class TLSparseXbar(clients: Seq[TLSparseXbar.ClientSpec], nManagers: Int = 4, txns: Int = 5000)(implicit p: Parameters) extends LazyModule {
++  require(clients.nonEmpty)
+
+   val xbar = LazyModule(new TLXbar)
+
+-  val fuzzers = visibilities.zipWithIndex.map { case (vis, n) =>
+-    val fuzz = LazyModule(new TLFuzzer(txns, overrideAddress = Some(vis)))
+-    val filter = LazyModule(new TLFilter(cfilter = { c => Some(c.v1copy(visibility = Seq(vis))) }))
++  val fuzzers = clients.zipWithIndex.map { case (spec, n) =>
++    val fuzz = LazyModule(new TLFuzzer(txns, overrideAddress = Some(spec.stimulus)))
++    val filter = LazyModule(new TLFilter(cfilter = { c => Some(c.v1copy(visibility = Seq(spec.visibility))) }))
+     xbar.node := TLDelayer(0.1) := filter.node := fuzz.node
+     fuzz
+   }
+@@
+-class TLSparseXbarTest(visibilities: Seq[AddressSet], nManagers: Int = 4, txns: Int = 5000, timeout: Int = 500000)(implicit p: Parameters) extends UnitTest(timeout) {
+-  val dut = Module(LazyModule(new TLSparseXbar(visibilities, nManagers, txns)).module)
++class TLSparseXbarTest(clients: Seq[TLSparseXbar.ClientSpec], nManagers: Int = 4, txns: Int = 5000, timeout: Int = 500000)(implicit p: Parameters) extends UnitTest(timeout) {
++  val dut = Module(LazyModule(new TLSparseXbar(clients, nManagers, txns)).module)
+   dut.io.start := io.start
+   io.finished := dut.io.finished
+ }
+
+--- a/src/main/scala/unittest/Configs.scala
++++ b/src/main/scala/unittest/Configs.scala
+@@ class WithTLSparseXbarUnitTests
+-    val visibilities = Seq(
+-      freechips.rocketchip.diplomacy.AddressSet(0x0,   0x3ff), // client0: manager0 only
+-      freechips.rocketchip.diplomacy.AddressSet(0x0,   0x7ff), // client1: managers 0,1
+-      freechips.rocketchip.diplomacy.AddressSet(0x800, 0x7ff), // client2: managers 2,3
+-      freechips.rocketchip.diplomacy.AddressSet(0x0,   0xfff)  // client3: all managers
+-    )
+-    Seq(Module(new TLSparseXbarTest(visibilities, nManagers=4, txns=2*txns, timeout=timeout)))
++    val clients = Seq(
++      TLSparseXbar.ClientSpec(freechips.rocketchip.diplomacy.AddressSet(0x0,   0x3ff)),
++      TLSparseXbar.ClientSpec(freechips.rocketchip.diplomacy.AddressSet(0x0,   0x7ff)),
++      TLSparseXbar.ClientSpec(freechips.rocketchip.diplomacy.AddressSet(0x800, 0x7ff)),
++      TLSparseXbar.ClientSpec(freechips.rocketchip.diplomacy.AddressSet(0x0,   0xfff))
++    )
++    Seq(Module(new TLSparseXbarTest(clients, nManagers=4, txns=2*txns, timeout=timeout)))
+   }
+ })
++
++// riscv_study: deliberate negative test -- client0's visibility stays at
++// manager0 only, but its stimulus is widened to span all 4 managers.
++class WithTLSparseXbarNegativeTest extends Config((site, here, up) => {
++  case UnitTests => (q: Parameters) => {
++    implicit val p = q
++    val txns = 100 * site(TestDurationMultiplier)
++    val timeout = 50000 * site(TestDurationMultiplier)
++    val clients = Seq(
++      TLSparseXbar.ClientSpec(
++        visibility = freechips.rocketchip.diplomacy.AddressSet(0x0, 0x3ff),
++        stimulus   = freechips.rocketchip.diplomacy.AddressSet(0x0, 0xfff)),
++      TLSparseXbar.ClientSpec(freechips.rocketchip.diplomacy.AddressSet(0x0,   0x7ff)),
++      TLSparseXbar.ClientSpec(freechips.rocketchip.diplomacy.AddressSet(0x800, 0x7ff)),
++      TLSparseXbar.ClientSpec(freechips.rocketchip.diplomacy.AddressSet(0x0,   0xfff))
++    )
++    Seq(Module(new TLSparseXbarTest(clients, nManagers=4, txns=2*txns, timeout=timeout)))
++  }
++})
+
+@@ class TLSparseXbarUnitTestConfig
+ class TLSparseXbarUnitTestConfig extends Config(new WithTLSparseXbarUnitTests ++ new WithTestDuration(10) ++ new BaseSubsystemConfig)
++class TLSparseXbarNegativeTestConfig extends Config(new WithTLSparseXbarNegativeTest ++ new WithTestDuration(10) ++ new BaseSubsystemConfig)
+
+--- a/build.sc
++++ b/build.sc
+@@ emulator cross-list
+   ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.TLSparseXbarUnitTestConfig"),
++  ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.TLSparseXbarNegativeTestConfig"),
+   // DTM

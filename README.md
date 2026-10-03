@@ -18,8 +18,12 @@ RocketChip의 TileLink crossbar(`TLXbar`)가 만들어내는 **sparse connectivi
       (`TLSparseXbarTest`) 구현, 비대칭 sparse 패턴(client0: 단일 reachable manager
       포함)으로 67530 cycles에서 통과 확인 — 상세:
       [`docs/06-sparse-harness-design.md`](docs/06-sparse-harness-design.md)
-- [ ] (다음 라운드) 의도적 negative test — overrideAddress를 visibility보다 넓게
-      줘서 don't-care alias(단일 reachable manager로 조용히 라우팅되는 현상) 실증
+- [x] 의도적 negative test — client0의 stimulus를 visibility보다 넓혀봤더니
+      "조용히 aliasing"이 아니라 **`TLMonitor`가 cycle 14에서 즉시 assertion으로
+      잡음** (가설 정정 포함, 상세: [`docs/07-negative-test-results.md`](docs/07-negative-test-results.md))
+- [ ] (다음 라운드) `TLMonitor`가 못 잡는 진짜 aliasing 경로 — visibility **선언
+      자체**가 틀린 경우(모니터는 선언을 사실로 믿으므로 무사통과) 재현, golden
+      matrix 비교로만 잡힘을 실증
 - [ ] (다음 라운드) 파형(VCD) 확인 필요시 `make debug`로 디버그 빌드 재생성
 
 ## 호스트 가정

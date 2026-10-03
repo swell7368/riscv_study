@@ -109,6 +109,16 @@ val connectEIO = releaseIO     // E: master -> slave grant-ack
   그 master가 보내는 **모든** 주소가 그 한 slave로 간다. 이게 의도한 것인지, 그리고
   범위 밖 접근이 상위(`TLMonitor`, 에러 디바이스, `TLFilter`)에서 잡히는지 명시적으로
   확인한다. **이 체크리스트 전체에서 가장 가치 높은 단일 항목.**
+  > **round 5 실측 (`docs/07-negative-test-results.md`):** 실제로 client의
+  > 선언된 visibility보다 넓은 주소를 생성시켜봤더니, `TLMonitor`가 "'A' channel
+  > carries an address illegal for the specified bank visibility" assertion으로
+  > cycle 14에서 즉시 잡았다 — 라우팅 디코더의 degenerate 여부와 **무관하게**,
+  > 모니터는 생성된 주소를 client가 선언한 visibility 목록과 직접 대조한다. 즉
+  > "fuzzer/상위 로직이 visibility 밖 주소를 만드는" 경로는 이 체크로 방어된다.
+  > 반면 이 체크가 **못 잡는** 경로는 "visibility 선언 자체가 틀린 경우"(Section A의
+  > false positive — 좁혀야 하는데 깜빡하고 기본값으로 둔 경우)다. 모니터는 선언을
+  > 사실로 믿고 그 안에서만 검증하므로, 선언 자체의 오류는 Section A가 요구하는
+  > "독립적으로 도출한 golden matrix와 비교"로만 잡힌다.
 - [ ] **도달가능 slave가 0개인 case.** row 전체가 false인 master는 설정 버그다.
   elaboration이 크게 실패하거나, 명시적으로 tie-off되고 문서화되어 있는지 확인.
 - [ ] **1×1 identity path.** master 1개, slave 1개면 arbiter/decoder 없이 pass-through로
