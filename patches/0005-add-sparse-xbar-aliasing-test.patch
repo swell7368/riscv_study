@@ -1,0 +1,63 @@
+# Incremental changes on top of patches/0004-add-sparse-xbar-negative-test.patch.
+# (Reference/documentation patch; see docs/08-aliasing-reproduction-results.md.)
+
+--- a/src/main/scala/unittest/SparseXbarTest.scala
++++ b/src/main/scala/unittest/SparseXbarTest.scala
+@@ object TLSparseXbar
+-  case class ClientSpec(visibility: AddressSet, stimulus: AddressSet)
++  // visibility widened from a single AddressSet to Seq[AddressSet] so a
++  // client can declare visibility over several disjoint regions -- needed
++  // to construct a "mistaken declaration" (real manager range UNION an
++  // unrelated, unclaimed region) for the round 6 aliasing test.
++  case class ClientSpec(visibility: Seq[AddressSet], stimulus: AddressSet)
+   object ClientSpec {
+-    def apply(both: AddressSet): ClientSpec = ClientSpec(both, both)
++    def apply(both: AddressSet): ClientSpec = ClientSpec(Seq(both), both)
+   }
+ }
+@@ TLSparseXbar fuzzers loop
+-    val filter = LazyModule(new TLFilter(cfilter = { c => Some(c.v1copy(visibility = Seq(spec.visibility))) }))
++    val filter = LazyModule(new TLFilter(cfilter = { c => Some(c.v1copy(visibility = spec.visibility)) }))
+
+--- a/src/main/scala/unittest/Configs.scala
++++ b/src/main/scala/unittest/Configs.scala
+@@ WithTLSparseXbarNegativeTest (visibility now wrapped in Seq(...))
+-        visibility = freechips.rocketchip.diplomacy.AddressSet(0x0, 0x3ff),
++        visibility = Seq(freechips.rocketchip.diplomacy.AddressSet(0x0, 0x3ff)),
+
+@@ after WithTLSparseXbarNegativeTest's closing })
++// riscv_study: reproduce the aliasing risk TLMonitor's visibility check
++// CANNOT catch. client0's *declaration* itself is wrong: visibility =
++// manager0's real range UNION an unclaimed region (0x1000-0x13ff) no
++// manager owns. Stimulus is driven entirely inside the unclaimed region,
++// so the round-5 visibility check has nothing to object to.
++class WithTLSparseXbarAliasingTest extends Config((site, here, up) => {
++  case UnitTests => (q: Parameters) => {
++    implicit val p = q
++    val txns = 100 * site(TestDurationMultiplier)
++    val timeout = 50000 * site(TestDurationMultiplier)
++    val clients = Seq(
++      TLSparseXbar.ClientSpec(
++        visibility = Seq(
++          freechips.rocketchip.diplomacy.AddressSet(0x0,    0x3ff),
++          freechips.rocketchip.diplomacy.AddressSet(0x1000, 0x3ff)
++        ),
++        stimulus = freechips.rocketchip.diplomacy.AddressSet(0x1000, 0x3ff)),
++      TLSparseXbar.ClientSpec(freechips.rocketchip.diplomacy.AddressSet(0x0,   0x7ff)),
++      TLSparseXbar.ClientSpec(freechips.rocketchip.diplomacy.AddressSet(0x800, 0x7ff)),
++      TLSparseXbar.ClientSpec(freechips.rocketchip.diplomacy.AddressSet(0x0,   0xfff))
++    )
++    Seq(Module(new TLSparseXbarTest(clients, nManagers=4, txns=2*txns, timeout=timeout)))
++  }
++})
+
+@@ class TLSparseXbarNegativeTestConfig
+ class TLSparseXbarNegativeTestConfig extends Config(new WithTLSparseXbarNegativeTest ++ new WithTestDuration(10) ++ new BaseSubsystemConfig)
++class TLSparseXbarAliasingTestConfig extends Config(new WithTLSparseXbarAliasingTest ++ new WithTestDuration(10) ++ new BaseSubsystemConfig)
+
+--- a/build.sc
++++ b/build.sc
+@@ emulator cross-list
+   ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.TLSparseXbarNegativeTestConfig"),
++  ("freechips.rocketchip.unittest.TestHarness", "freechips.rocketchip.unittest.TLSparseXbarAliasingTestConfig"),
+   // DTM

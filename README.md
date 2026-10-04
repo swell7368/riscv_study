@@ -21,10 +21,13 @@ RocketChip의 TileLink crossbar(`TLXbar`)가 만들어내는 **sparse connectivi
 - [x] 의도적 negative test — client0의 stimulus를 visibility보다 넓혀봤더니
       "조용히 aliasing"이 아니라 **`TLMonitor`가 cycle 14에서 즉시 assertion으로
       잡음** (가설 정정 포함, 상세: [`docs/07-negative-test-results.md`](docs/07-negative-test-results.md))
-- [ ] (다음 라운드) `TLMonitor`가 못 잡는 진짜 aliasing 경로 — visibility **선언
-      자체**가 틀린 경우(모니터는 선언을 사실로 믿으므로 무사통과) 재현, golden
-      matrix 비교로만 잡힘을 실증
-- [ ] (다음 라운드) 파형(VCD) 확인 필요시 `make debug`로 디버그 빌드 재생성
+- [x] `TLMonitor`가 못 잡는 진짜 aliasing 경로 재현 — client0의 visibility
+      **선언 자체**에 존재하지 않는 영역을 포함시켜봤더니, 모니터는 무반응이었고
+      대신 **타임아웃까지 조용히 hang** (에러 메시지 없음 — 워치독만이 "뭔가
+      끝나지 않았다"는 사실을 잡아냄). 상세:
+      [`docs/08-aliasing-reproduction-results.md`](docs/08-aliasing-reproduction-results.md)
+- [ ] (다음 라운드) 정확히 어느 모듈에서 요청이 삼켜졌는지 파형(VCD)으로 추적
+      (`make debug` 디버그 빌드 필요)
 
 ## 호스트 가정
 

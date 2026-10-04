@@ -235,6 +235,12 @@ val connectEIO = releaseIO     // E: master -> slave grant-ack
 - [ ] **타임아웃 워치독.** 유닛테스트 하네스는 명시적 `timeout`을 받는다(예:
   `TLRAMXbarTest(nManagers, txns=5000, timeout=500000)`). sparse 테스트에도 타임아웃을
   둬서 deadlock이 "실패"로 드러나게, 그냥 시뮬레이션이 멈춰버리지 않게 한다.
+  > **round 6 실측 (`docs/08-aliasing-reproduction-results.md`):** visibility
+  > **선언 자체**가 틀린 경우(존재하지 않는 영역까지 보인다고 선언) 재현해봤더니,
+  > `TLMonitor`는 (선언과 일치하므로) 전혀 반응하지 않았고 대신 **조용히 hang**됐다
+  > — 타임아웃 워치독이 "원인은 몰라도 뭔가 끝나지 않았다"는 사실만은 잡아냈다.
+  > 워치독이 없었다면 이 버그는 시뮬레이션이 영원히 멈춘 것 외엔 아무 신호도 없이
+  > 사라졌을 것이다.
 - [ ] **livelock/forward progress.** 지속적인 경쟁 하에서도 모든 master가 결국 완료되는지
   — master별 완료 카운트가 장시간 돌려도 단조 증가하는지 assert.
 - [ ] **극단적으로 치우친 sparsity에서의 starvation 스트레스.** row 폭 1인 master와
